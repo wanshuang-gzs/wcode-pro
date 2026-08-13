@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>WCode Pro — 订阅</title>
 <meta name="description" content="WCode Pro 订阅：解锁全部高级模型，每月 5000 积分。">
-<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js" onerror="document.addEventListener('DOMContentLoaded', function(){ document.getElementById('price-month').textContent='×'; document.getElementById('price-year').textContent='×'; document.getElementById('subscribe-btn').textContent='重试'; document.getElementById('subscribe-btn').classList.add('secondary'); document.getElementById('subscribe-btn').disabled=false; document.getElementById('status').textContent='支付组件加载失败：无法访问 cdn.paddle.com（请检查网络或代理）'; document.getElementById('status').className='error'; });"></script>
 <style>
   :root {
     --pro: #7C4DFF;
@@ -108,6 +108,26 @@
     el.className = isError ? 'error' : '';
   }
 
+  // 错误直接显示在价格位置，方便发现网络/初始化问题
+  function showPriceError(msg) {
+    document.getElementById('price-month').textContent = '×';
+    document.getElementById('price-year').textContent = '×';
+    document.getElementById('subscribe-btn').textContent = '重试';
+    document.getElementById('subscribe-btn').classList.add('secondary');
+    document.getElementById('subscribe-btn').disabled = false;
+    setStatus(msg, true);
+  }
+
+  function withTimeout(p, ms, label) {
+    return new Promise(function (resolve, reject) {
+      var t = setTimeout(function () {
+        reject(new Error(label + '（' + ms / 1000 + ' 秒）'));
+      }, ms);
+      p.then(function (v) { clearTimeout(t); resolve(v); },
+             function (e) { clearTimeout(t); reject(e); });
+    });
+  }
+
   // 官方 v2 初始化，只调一次；后续 API 都在该 Promise 之后执行
   function ensureInitialized() {
     if (typeof Paddle === 'undefined') return Promise.reject(new Error('Paddle.js 未加载'));
@@ -141,13 +161,18 @@
   // PricePreview：等 Initialize 完成后取价，只展示 Paddle 返回的 formattedTotals
   function loadPrices() {
     var btn = document.getElementById('subscribe-btn');
-    ensureInitialized().then(function () {
-      return Paddle.PricePreview.preview({
-        items: [
-          { priceId: PRICE_MONTH, quantity: 1 },
-          { priceId: PRICE_YEAR, quantity: 1 }
-        ]
-      });
+    btn.disabled = true;
+    btn.textContent = '正在加载价格…';
+    withTimeout(ensureInitialized(), 15000, 'Paddle 初始化超时：无法连接 Paddle 服务器').then(function () {
+      return withTimeout(
+        Paddle.PricePreview.preview({
+          items: [
+            { priceId: PRICE_MONTH, quantity: 1 },
+            { priceId: PRICE_YEAR, quantity: 1 }
+          ]
+        }),
+        15000, '价格获取超时：无法连接 Paddle 服务器'
+      );
     }).then(function (res) {
       var items = res && res.items || [];
       if (items.length >= 2) {
@@ -162,11 +187,8 @@
       var q = new URLSearchParams(location.search).get('checkout');
       if (q === 'month') openCheckout(PRICE_MONTH);
       else if (q === 'year') openCheckout(PRICE_YEAR);
-    }).catch(function () {
-      setStatus('价格加载失败，请检查网络', true);
-      btn.disabled = false;
-      btn.textContent = '重新加载价格';
-      btn.classList.add('secondary');
+    }).catch(function (e) {
+      showPriceError('价格加载失败: ' + (e && e.message ? e.message : e));
     });
   }
 

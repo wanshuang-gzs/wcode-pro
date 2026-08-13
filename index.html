@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>WCode Pro — 订阅</title>
+<meta name="description" content="WCode Pro 订阅：解锁全部高级模型，每月 5000 积分。">
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"
+        onerror="document.getElementById('status').textContent = '支付组件加载失败，请刷新重试';"></script>
+<style>
+  :root {
+    --gold: #F2B705;
+    --gold-deep: #C98A00;
+    --bg: #0A0A0A;
+    --panel: #121212;
+    --card: #1C1C1C;
+    --text: #F5F5F5;
+    --muted: #9e9e9e;
+    --error: #FF8A5C;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px 16px 48px; }
+  .hero {
+    width: 100%; max-width: 420px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-deep));
+    border-radius: 20px; padding: 28px 24px; margin-bottom: 20px;
+  }
+  .hero h1 { font-size: 26px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 10px; }
+  .hero h1 .star { background: rgba(255,255,255,.2); border-radius: 50%; padding: 8px; line-height: 0; }
+  .hero p { color: rgba(255,255,255,.92); margin-top: 8px; font-size: 14px; }
+  .card {
+    width: 100%; max-width: 420px; background: var(--card); border-radius: 16px;
+    padding: 20px; margin-bottom: 16px;
+  }
+  .feature { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 14px; }
+  .feature .dot { width: 18px; height: 18px; flex: none; border-radius: 50%; background: rgba(242,183,5,.15);
+    display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--gold); }
+  .note { max-width: 420px; font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.6; }
+  .billing { display: flex; gap: 10px; width: 100%; max-width: 420px; margin-bottom: 16px; }
+  .billing .opt {
+    flex: 1; border-radius: 16px; padding: 14px; cursor: pointer; user-select: none;
+    background: var(--card); border: 1px solid rgba(255,255,255,.15); transition: all .15s;
+  }
+  .billing .opt h3 { font-size: 14px; color: var(--muted); font-weight: 600; }
+  .billing .opt .price { font-size: 24px; font-weight: 800; color: var(--text); margin-top: 2px; white-space: nowrap; }
+  .billing .opt small { font-size: 11px; color: var(--muted); }
+  .billing .opt.selected { background: rgba(242,183,5,.10); border: 2px solid var(--gold); }
+  .billing .opt.selected h3 { color: var(--gold); }
+  .btn {
+    width: 100%; max-width: 420px; height: 52px; border: none; border-radius: 14px;
+    background: var(--gold); color: #fff; font-size: 16px; font-weight: 800; cursor: pointer;
+  }
+  .btn:disabled { opacity: .5; cursor: default; }
+  #status { width: 100%; max-width: 420px; text-align: center; font-size: 13px;
+    color: var(--muted); margin-top: 14px; min-height: 18px; }
+  #status.error { color: var(--error); }
+</style>
+</head>
+<body>
+
+  <div class="hero">
+    <h1><span class="star">★</span>WCode Pro</h1>
+    <p>解锁全部高级模型 · 每月 5000 积分</p>
+  </div>
+
+  <div class="card">
+    <div class="feature"><span class="dot">✓</span>Pro 专属模型（GPT-4o / Claude / Grok / Mistral）</div>
+    <div class="feature"><span class="dot">✓</span>每月 5000 积分，周期内自动重置</div>
+    <div class="feature"><span class="dot">✓</span>App 与微信通道共享权益</div>
+  </div>
+
+  <p class="note">支付由 Paddle 安全处理；价格为 Paddle 按你的所在地实时换算的本地化价格（含税总价）。</p>
+
+  <div class="billing">
+    <div class="opt" id="opt-month">
+      <h3>月付</h3>
+      <div class="price" id="price-month">…</div>
+      <small>随时取消</small>
+    </div>
+    <div class="opt selected" id="opt-year">
+      <h3>年付</h3>
+      <div class="price" id="price-year">…</div>
+      <small>推荐 · 连续订阅</small>
+    </div>
+  </div>
+
+  <button class="btn" id="subscribe-btn" disabled>正在加载价格…</button>
+  <div id="status"></div>
+
+<script>
+  // 客户端令牌可公开嵌入（Paddle 官方允许）；如需轮换，替换成新 token 并重新部署即可
+  var CLIENT_TOKEN = 'live_f6faf2e14b6a187b46d1e431b14';
+  var PRICE_MONTH = 'pri_01kzy2ff2ymzps399pvfypme67'; // Pro 月付
+  var PRICE_YEAR  = 'pri_01kzy2ff4z39a3ryxz6ykr1w7w'; // Pro 年付
+
+  var monthly = true;
+  var monthTotal = null;
+  var yearTotal = null;
+
+  function setStatus(msg, isError) {
+    var el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = isError ? 'error' : '';
+  }
+
+  function ensureInitialized() {
+    if (typeof Paddle === 'undefined') throw new Error('Paddle.js 未加载');
+    Paddle.Initialize({
+      token: CLIENT_TOKEN,
+      checkout: {
+        settings: {
+          displayMode: 'overlay',
+          variant: 'one-page',
+          frameInitialHeight: '520',
+          frameStyle: 'width: 100%; min-width: 312px; background-color: #fff; border: none;'
+        }
+      }
+    });
+  }
+
+  function openCheckout(priceId) {
+    try {
+      ensureInitialized();
+      Paddle.Checkout.open({
+        items: [{ priceId: priceId, quantity: 1 }],
+        customData: { source: 'wcode_pricing_page' }
+      });
+    } catch (e) {
+      setStatus('拉起支付失败: ' + (e && e.message ? e.message : e), true);
+    }
+  }
+
+  // PricePreview：按访客 IP 自动本地化货币，只展示 Paddle 返回的 formattedTotals
+  function loadPrices() {
+    var btn = document.getElementById('subscribe-btn');
+    Paddle.PricePreview.preview({
+      items: [
+        { priceId: PRICE_MONTH, quantity: 1 },
+        { priceId: PRICE_YEAR, quantity: 1 }
+      ]
+    }).then(function (res) {
+      var items = res && res.items || [];
+      if (items.length >= 2) {
+        monthTotal = items[0].formattedTotals && items[0].formattedTotals.total || null;
+        yearTotal  = items[1].formattedTotals && items[1].formattedTotals.total || null;
+      }
+      document.getElementById('price-month').textContent = monthTotal || '—';
+      document.getElementById('price-year').textContent = yearTotal || '—';
+      btn.disabled = false;
+      btn.textContent = '订阅 ' + (monthly ? '月付' : '年付') + (monthly ? monthTotal : yearTotal) || '';
+      // 支持 ?checkout=month / ?checkout=year 自动打开结账（用于测试验证）
+      var q = new URLSearchParams(location.search).get('checkout');
+      if (q === 'month') openCheckout(PRICE_MONTH);
+      else if (q === 'year') openCheckout(PRICE_YEAR);
+    }).catch(function () {
+      setStatus('价格加载失败，请刷新重试', true);
+      btn.disabled = false;
+      btn.textContent = '刷新重试';
+    });
+  }
+
+  document.getElementById('opt-month').addEventListener('click', function () {
+    monthly = true;
+    this.classList.add('selected');
+    document.getElementById('opt-year').classList.remove('selected');
+    document.getElementById('subscribe-btn').textContent = '订阅 月付 ' + (monthTotal || '');
+  });
+  document.getElementById('opt-year').addEventListener('click', function () {
+    monthly = false;
+    this.classList.add('selected');
+    document.getElementById('opt-month').classList.remove('selected');
+    document.getElementById('subscribe-btn').textContent = '订阅 年付 ' + (yearTotal || '');
+  });
+  document.getElementById('subscribe-btn').addEventListener('click', function () {
+    openCheckout(monthly ? PRICE_MONTH : PRICE_YEAR);
+  });
+
+  function waitPaddle() {
+    if (typeof Paddle !== 'undefined') {
+      loadPrices();
+      return;
+    }
+    setTimeout(waitPaddle, 200);
+  }
+  setTimeout(waitPaddle, 100);
+
+  if (typeof Paddle !== 'undefined') {
+    Paddle.EventBus.on('checkout.completed', function () {
+      setStatus('支付成功！返回 WCode App 即可使用 Pro 权益');
+    });
+    Paddle.EventBus.on('checkout.closed', function () {});
+  }
+</script>
+</body>
+</html>
